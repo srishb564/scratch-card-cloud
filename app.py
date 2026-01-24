@@ -39,25 +39,35 @@ init_db()
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        card_name = request.form["card_name"]
+        card_name = request.form.get("card_name")
+        if not card_name:
+            return "card_name missing", 400
 
-        card_id = uuid.uuid4()
-        reward = random.choice(["₹50", "₹100", "Better Luck Next Time"])
-        link = request.host_url + "scratch/" + str(card_id)
+        try:
+            card_id = uuid.uuid4()
+            reward = random.choice(["₹50", "₹100", "Better Luck Next Time"])
+            link = request.host_url.rstrip("/") + "/scratch/" + str(card_id)
 
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO scratch_cards (id, card_name, reward, link, scratched) VALUES (%s, %s, %s, %s, %s)",
-            (card_id, card_name, reward, link, False)
-        )
-        conn.commit()
-        cur.close()
-        conn.close()
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO scratch_cards (id, card_name, reward, link, scratched)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (card_id, card_name, reward, link, False)
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+
+        except Exception as e:
+            return f"Database error: {e}", 500
 
         return redirect(url_for("index"))
 
     return render_template("index.html")
+
 
 # =========================
 # SCRATCH CARD PAGE
