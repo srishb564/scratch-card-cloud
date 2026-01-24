@@ -118,46 +118,49 @@ def mark_scratched(card_id):
 # =========================
 @app.route("/admin")
 def admin():
-    conn = get_db_connection()
-    cur = conn.cursor()
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
 
-    cur.execute("""
-        SELECT card_name, id, reward, link, scratched, created_at
-        FROM scratch_cards
-        ORDER BY created_at DESC
-    """)
-    rows = cur.fetchall()
+        cur.execute("""
+            SELECT card_name, reward, link, scratched, created_at
+            FROM scratch_cards
+            ORDER BY created_at DESC
+        """)
 
-    cur.close()
-    conn.close()
+        rows = cur.fetchall()
 
-    html = """
-    <h2>Scratch Cards Admin Panel</h2>
-    <table border="1" cellpadding="8">
-        <tr>
-            <th>Card Name</th>
-            <th>Card ID</th>
-            <th>Reward</th>
-            <th>Link</th>
-            <th>Scratched</th>
-            <th>Created</th>
-        </tr>
-    """
+        cur.close()
+        conn.close()
 
-    for r in rows:
-        html += f"""
-        <tr>
-            <td>{r[0]}</td>
-            <td>{r[1]}</td>
-            <td>{r[2]}</td>
-            <td><a href="{r[3]}" target="_blank">{r[3]}</a></td>
-            <td>{r[4]}</td>
-            <td>{r[5]}</td>
-        </tr>
+        html = """
+        <h1>Scratch Card Admin Panel</h1>
+        <table border="1" cellpadding="8">
+            <tr>
+                <th>Card Name</th>
+                <th>Reward</th>
+                <th>Link</th>
+                <th>Scratched</th>
+                <th>Created</th>
+            </tr>
         """
 
-    html += "</table>"
-    return html
+        for r in rows:
+            html += f"""
+            <tr>
+                <td>{r[0]}</td>
+                <td>{r[1]}</td>
+                <td><a href="{r[2]}" target="_blank">{r[2]}</a></td>
+                <td>{r[3]}</td>
+                <td>{r[4]}</td>
+            </tr>
+            """
+
+        html += "</table>"
+        return html
+
+    except Exception as e:
+        return f"Admin error: {str(e)}", 500
 
 
 # =========================
