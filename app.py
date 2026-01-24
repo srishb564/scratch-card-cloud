@@ -79,25 +79,33 @@ def index():
 def scratch(card_id):
     conn = get_db_connection()
     cur = conn.cursor()
+
     cur.execute(
-        "SELECT reward, scratched FROM scratch_cards WHERE id = %s",
-        (card_id,)
+        """
+        SELECT card_name, reward, scratched
+        FROM scratch_cards
+        WHERE id = %s
+        """,
+        (str(card_id),)
     )
-    data = cur.fetchone()
+
+    row = cur.fetchone()
     cur.close()
     conn.close()
 
-    if not data:
-        return "Invalid or expired scratch card"
+    if row is None:
+        return "Invalid or expired scratch card", 404
 
-    reward, scratched = data
+    card_name, reward, scratched = row
 
     return render_template(
         "scratch.html",
+        card_name=card_name,
         reward=reward,
-        card_id=str(card_id),
-        scratched=scratched
+        scratched=scratched,
+        card_id=card_id
     )
+
 
 # =========================
 # MARK AS SCRATCHED (60%)
@@ -108,13 +116,13 @@ def mark_scratched(card_id):
     cur = conn.cursor()
     cur.execute(
         "UPDATE scratch_cards SET scratched = TRUE WHERE id = %s",
-        (card_id,)
+        (str(card_id),)
     )
     conn.commit()
     cur.close()
     conn.close()
 
-    return jsonify({"status": "success"})
+    return {"status":"ok"}
 
 # =========================
 # ADMIN PANEL
