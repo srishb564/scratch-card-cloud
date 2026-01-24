@@ -128,7 +128,7 @@ def admin():
         cur.execute("""
             SELECT card_name, reward, link, scratched
             FROM scratch_cards
-            ORDER BY created_at DESC
+            ORDER BY DESC
         """)
 
         rows = cur.fetchall()
