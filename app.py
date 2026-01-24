@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, redirect, url_for, jsonify,send_file
+import pandas as pd
 import uuid
 import os
 import random
@@ -19,6 +20,19 @@ def init_excel():
         wb.save(EXCEL_FILE)
 
 init_excel()
+@app.route("/admin")
+def admin():
+    df=pd.read_excel(EXCEL_FILE)
+    return df.to_html(index=False)
+
+@app.route("/download-excel")
+def download_excel():
+    return send_file(
+        EXCEL_FILE,
+        as_attachment=True,
+        download_name="scratch_cards.xlsx"
+    )
+
 
 @app.route("/", methods=["GET", "POST"])
 def index():
