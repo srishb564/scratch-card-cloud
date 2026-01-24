@@ -120,12 +120,45 @@ def mark_scratched(card_id):
 def admin():
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, card_name, reward, link, scratched FROM scratch_cards")
+
+    cur.execute("""
+        SELECT card_name, id, reward, link, scratched, created_at
+        FROM scratch_cards
+        ORDER BY created_at DESC
+    """)
     rows = cur.fetchall()
+
     cur.close()
     conn.close()
 
-    return render_template("admin.html", rows=rows)
+    html = """
+    <h2>Scratch Cards Admin Panel</h2>
+    <table border="1" cellpadding="8">
+        <tr>
+            <th>Card Name</th>
+            <th>Card ID</th>
+            <th>Reward</th>
+            <th>Link</th>
+            <th>Scratched</th>
+            <th>Created</th>
+        </tr>
+    """
+
+    for r in rows:
+        html += f"""
+        <tr>
+            <td>{r[0]}</td>
+            <td>{r[1]}</td>
+            <td>{r[2]}</td>
+            <td><a href="{r[3]}" target="_blank">{r[3]}</a></td>
+            <td>{r[4]}</td>
+            <td>{r[5]}</td>
+        </tr>
+        """
+
+    html += "</table>"
+    return html
+
 
 # =========================
 # HEALTH CHECK (OPTIONAL)
