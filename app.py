@@ -128,7 +128,7 @@ def admin():
         cur.execute("""
             SELECT card_name, reward, link, scratched
             FROM scratch_cards
-            
+            ORDER BY card_name
         """)
 
         rows = cur.fetchall()
@@ -144,7 +144,6 @@ def admin():
                 <th>Reward</th>
                 <th>Link</th>
                 <th>Scratched</th>
-                <th>Created</th>
             </tr>
         """
 
@@ -155,7 +154,6 @@ def admin():
                 <td>{r[1]}</td>
                 <td><a href="{r[2]}" target="_blank">{r[2]}</a></td>
                 <td>{r[3]}</td>
-                <td>{r[4]}</td>
             </tr>
             """
 
@@ -164,6 +162,7 @@ def admin():
 
     except Exception as e:
         return f"Admin error: {str(e)}", 500
+
 
 
 # =========================
