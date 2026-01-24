@@ -44,7 +44,7 @@ def index():
             return "card_name missing", 400
 
         try:
-            card_id = uuid.uuid4()
+            card_id =str(uuid.uuid4())
             reward = random.choice(["₹50", "₹100", "Better Luck Next Time"])
             link = request.host_url.rstrip("/") + "/scratch/" + str(card_id)
 
