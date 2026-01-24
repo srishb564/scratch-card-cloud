@@ -126,7 +126,7 @@ def admin():
         cur = conn.cursor()
 
         cur.execute("""
-            SELECT card_name, reward, link, scratched, created_at
+            SELECT card_name, reward, link, scratched
             FROM scratch_cards
             ORDER BY created_at DESC
         """)
