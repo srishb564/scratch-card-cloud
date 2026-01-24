@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Scratch Card</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<h2>Scratch to Reveal</h2>
+
+<div class="card-container">
+    <div id="reward">{{ reward }}</div>
+    <canvas id="scratchCanvas"></canvas>
+</div>
+
+<script>
+    const CARD_ID = "{{ card_id }}";
+</script>
+<script src="/static/scratch.js"></script>
+
+</body>
+</html>
