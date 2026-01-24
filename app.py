@@ -1,84 +1,125 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify,send_file
-import pandas as pd
-import uuid
 import os
+import uuid
 import random
-from openpyxl import Workbook, load_workbook
+import psycopg2
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 
-app = Flask(__name__, template_folder="templates", static_folder="static")
+app = Flask(__name__)
 
-EXCEL_FILE = "scratch_cards.xlsx"
+# =========================
+# DATABASE CONFIG
+# =========================
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-REWARDS = ["₹50", "₹100", "Better Luck Next Time"]
+def get_db_connection():
+    return psycopg2.connect(DATABASE_URL, sslmode="require")
 
-def init_excel():
-    if not os.path.exists(EXCEL_FILE):
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "ScratchCards"
-        ws.append(["Card Name", "Card ID", "Reward", "Link", "Scratched"])
-        wb.save(EXCEL_FILE)
+def init_db():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS scratch_cards (
+            id UUID PRIMARY KEY,
+            card_name TEXT NOT NULL,
+            reward TEXT NOT NULL,
+            link TEXT NOT NULL,
+            scratched BOOLEAN DEFAULT FALSE
+        );
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
 
-init_excel()
-@app.route("/admin")
-def admin():
-    df=pd.read_excel(EXCEL_FILE)
-    return df.to_html(index=False)
+# Initialize DB on startup
+init_db()
 
-@app.route("/download-excel")
-def download_excel():
-    return send_file(
-        EXCEL_FILE,
-        as_attachment=True,
-        download_name="scratch_cards.xlsx"
-    )
-
-
+# =========================
+# HOME – GENERATE SCRATCH CARD
+# =========================
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
         card_name = request.form["card_name"]
-        card_id = str(uuid.uuid4())
-        reward = random.choice(REWARDS)
-        link = request.host_url + "scratch/" + card_id
 
-        wb = load_workbook(EXCEL_FILE)
-        ws = wb.active
-        ws.append([card_name, card_id, reward, link, "NO"])
-        wb.save(EXCEL_FILE)
+        card_id = uuid.uuid4()
+        reward = random.choice(["₹50", "₹100", "Better Luck Next Time"])
+        link = request.host_url + "scratch/" + str(card_id)
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO scratch_cards (id, card_name, reward, link, scratched) VALUES (%s, %s, %s, %s, %s)",
+            (card_id, card_name, reward, link, False)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
 
         return redirect(url_for("index"))
 
     return render_template("index.html")
 
-@app.route("/scratch/<card_id>")
+# =========================
+# SCRATCH CARD PAGE
+# =========================
+@app.route("/scratch/<uuid:card_id>")
 def scratch(card_id):
-    wb = load_workbook(EXCEL_FILE)
-    ws = wb.active
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT reward, scratched FROM scratch_cards WHERE id = %s",
+        (card_id,)
+    )
+    data = cur.fetchone()
+    cur.close()
+    conn.close()
 
-    reward = "Better Luck Next Time"
+    if not data:
+        return "Invalid or expired scratch card"
 
-    for row in ws.iter_rows(min_row=2):
-        if row[1].value == card_id:
-            reward = row[2].value
-            break
+    reward, scratched = data
 
-    return render_template("scratch.html", card_id=card_id, reward=reward)
+    return render_template(
+        "scratch.html",
+        reward=reward,
+        card_id=str(card_id),
+        scratched=scratched
+    )
 
-@app.route("/mark_scratched", methods=["POST"])
-def mark_scratched():
-    card_id = request.json["card_id"]
+# =========================
+# MARK AS SCRATCHED (60%)
+# =========================
+@app.route("/mark-scratched/<uuid:card_id>", methods=["POST"])
+def mark_scratched(card_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE scratch_cards SET scratched = TRUE WHERE id = %s",
+        (card_id,)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
 
-    wb = load_workbook(EXCEL_FILE)
-    ws = wb.active
+    return jsonify({"status": "success"})
 
-    for row in ws.iter_rows(min_row=2):
-        if row[1].value == card_id:
-            row[4].value = "YES"
-            break
+# =========================
+# ADMIN PANEL
+# =========================
+@app.route("/admin")
+def admin():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, card_name, reward, link, scratched FROM scratch_cards")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
 
-    wb.save(EXCEL_FILE)
-    return jsonify({"status": "updated"})
+    return render_template("admin.html", rows=rows)
 
-if __name__ == "__main__":
-    app.run(debug=True)
+# =========================
+# HEALTH CHECK (OPTIONAL)
+# =========================
+@app.route("/health")
+def health():
+    return "OK"
