@@ -16,7 +16,7 @@ if (!canvas) {
     let revealed = false;
 
     const radius = 16;
-    const revealThreshold = 0.6; // 60%
+    const revealThreshold = 0.3; // 30%
 
     // -------------------------------
     // GET SCRATCH POSITION
