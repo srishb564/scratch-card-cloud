@@ -110,19 +110,27 @@ def scratch(card_id):
 # =========================
 # MARK AS SCRATCHED (60%)
 # =========================
-@app.route("/mark-scratched/<uuid:card_id>", methods=["POST"])
+@app.route("/mark_scratched/<uuid:card_id>", methods=["POST"])
 def mark_scratched(card_id):
+    print("MARK SCRATCHED HIT:", card_id, flush=True)
+
     conn = get_db_connection()
     cur = conn.cursor()
+
     cur.execute(
         "UPDATE scratch_cards SET scratched = TRUE WHERE id = %s",
         (str(card_id),)
     )
+
+    print("ROWS UPDATED:", cur.rowcount, flush=True)
+
     conn.commit()
+
     cur.close()
     conn.close()
 
-    return {"status":"ok"}
+    return {"status": "ok"}
+
 
 # =========================
 # ADMIN PANEL
