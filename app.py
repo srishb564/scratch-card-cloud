@@ -1,189 +1,148 @@
+from flask import Flask, render_template, request, redirect, url_for, jsonify
+import psycopg2
 import os
 import uuid
 import random
-import psycopg2
-from flask import Flask, render_template, request, redirect, url_for, jsonify
 
 app = Flask(__name__)
 
-# =========================
-# DATABASE CONFIG
-# =========================
-DATABASE_URL = os.environ.get("DATABASE_URL")
+# --------------------------------------------------
+# DATABASE CONNECTION (SINGLE SOURCE OF TRUTH)
+# --------------------------------------------------
+def get_db():
+    return psycopg2.connect(
+        os.environ["DATABASE_URL"],
+        sslmode="require"
+    )
 
-def get_db_connection():
-    return psycopg2.connect(os.environ["DATABASE_URL"])
-
-def get_conn():
-    return psycopg2.connect(os.environ["DATABASE_URL"])
-
-def init_db():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS scratch_cards (
-            id UUID PRIMARY KEY,
-            card_name TEXT NOT NULL,
-            reward TEXT NOT NULL,
-            link TEXT NOT NULL,
-            scratched BOOLEAN DEFAULT FALSE
-        );
-    """)
-    conn.commit()
-    cur.close()
-    conn.close()
-
-# Initialize DB on startup
-init_db()
-
-# =========================
-# HOME – GENERATE SCRATCH CARD
-# =========================
+# --------------------------------------------------
+# HOME PAGE – GENERATE SCRATCH CARD
+# --------------------------------------------------
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
         card_name = request.form.get("card_name")
-        if not card_name:
-            return "card_name missing", 400
 
-        try:
-            card_id =str(uuid.uuid4())
-            reward = random.choice(["₹50", "₹100", "Better Luck Next Time"])
-            link = request.host_url.rstrip("/") + "/scratch/" + str(card_id)
+        rewards = ["₹50", "₹100", "Better Luck Next Time"]
+        reward = random.choice(rewards)
 
-            conn = get_db_connection()
-            cur = conn.cursor()
-            cur.execute(
-                """
-                INSERT INTO scratch_cards (id, card_name, reward, link, scratched)
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (card_id, card_name, reward, link, False)
-            )
-            conn.commit()
-            cur.close()
-            conn.close()
+        card_id = str(uuid.uuid4())
+        link = request.url_root + "scratch/" + card_id
 
-        except Exception as e:
-            return f"Database error: {e}", 500
+        conn = get_db()
+        cur = conn.cursor()
 
-        return redirect(url_for("index"))
+        cur.execute("""
+            INSERT INTO scratch_cards (id, card_name, reward, link, scratched)
+            VALUES (%s, %s, %s, %s, FALSE)
+        """, (card_id, card_name, reward, link))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return redirect(url_for("admin"))
 
     return render_template("index.html")
 
-
-# =========================
+# --------------------------------------------------
 # SCRATCH CARD PAGE
-# =========================
-@app.route("/scratch/<uuid:card_id>")
+# --------------------------------------------------
+@app.route("/scratch/<card_id>")
 def scratch(card_id):
-    conn = get_db_connection()
+    conn = get_db()
     cur = conn.cursor()
 
-    cur.execute(
-        """
+    cur.execute("""
         SELECT card_name, reward, scratched
         FROM scratch_cards
         WHERE id = %s
-        """,
-        (str(card_id),)
-    )
+    """, (card_id,))
 
     row = cur.fetchone()
     cur.close()
     conn.close()
 
-    if row is None:
+    if not row:
         return "Invalid or expired scratch card", 404
-
-    card_name, reward, scratched = row
 
     return render_template(
         "scratch.html",
-        card_name=card_name,
-        reward=reward,
-        scratched=scratched,
+        card_name=row[0],
+        reward=row[1],
+        scratched=row[2],
         card_id=card_id
     )
 
-
-# =========================
-# MARK AS SCRATCHED (60%)
-# =========================
-@app.route("/mark_scratched/<uuid:card_id>", methods=["POST"])
+# --------------------------------------------------
+# MARK CARD AS SCRATCHED (CRITICAL ROUTE)
+# --------------------------------------------------
+@app.route("/mark_scratched/<card_id>", methods=["POST"])
 def mark_scratched(card_id):
-    print("MARK SCRATCHED HIT:", card_id, flush=True)
-
-    conn = get_db_connection()
+    conn = get_db()
     cur = conn.cursor()
 
-    cur.execute(
-        "UPDATE scratch_cards SET scratched = TRUE WHERE id = %s",
-        (str(card_id),)
-    )
+    cur.execute("""
+        UPDATE scratch_cards
+        SET scratched = TRUE
+        WHERE id = %s
+    """, (card_id,))
 
-    print("ROWS UPDATED:", cur.rowcount, flush=True)
-
+    updated_rows = cur.rowcount
     conn.commit()
 
     cur.close()
     conn.close()
 
-    return {"status": "ok"}
+    return jsonify({
+        "status": "ok",
+        "updated_rows": updated_rows
+    })
 
-
-# =========================
+# --------------------------------------------------
 # ADMIN PANEL
-# =========================
+# --------------------------------------------------
 @app.route("/admin")
 def admin():
-    try:
-        conn = get_conn()
-        cur = conn.cursor()
+    conn = get_db()
+    cur = conn.cursor()
 
-        cur.execute("""
-            SELECT card_name, reward, link, scratched
-            FROM scratch_cards
-            ORDER BY card_name
-        """)
+    cur.execute("""
+        SELECT card_name, reward, link, scratched
+        FROM scratch_cards
+        ORDER BY card_name
+    """)
 
-        rows = cur.fetchall()
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
 
-        cur.close()
-        conn.close()
+    html = """
+    <h1>Admin Panel</h1>
+    <table border="1" cellpadding="8">
+        <tr>
+            <th>Card Name</th>
+            <th>Reward</th>
+            <th>Link</th>
+            <th>Scratched</th>
+        </tr>
+    """
 
-        html = """
-        <h1>Scratch Card Admin Panel</h1>
-        <table border="1" cellpadding="8">
-            <tr>
-                <th>Card Name</th>
-                <th>Reward</th>
-                <th>Link</th>
-                <th>Scratched</th>
-            </tr>
+    for r in rows:
+        html += f"""
+        <tr>
+            <td>{r[0]}</td>
+            <td>{r[1]}</td>
+            <td><a href="{r[2]}" target="_blank">{r[2]}</a></td>
+            <td>{r[3]}</td>
+        </tr>
         """
 
-        for r in rows:
-            html += f"""
-            <tr>
-                <td>{r[0]}</td>
-                <td>{r[1]}</td>
-                <td><a href="{r[2]}" target="_blank">{r[2]}</a></td>
-                <td>{r[3]}</td>
-            </tr>
-            """
+    html += "</table>"
+    return html
 
-        html += "</table>"
-        return html
-
-    except Exception as e:
-        return f"Admin error: {str(e)}", 500
-
-
-
-# =========================
-# HEALTH CHECK (OPTIONAL)
-# =========================
-@app.route("/health")
-def health():
-    return "OK"
+# --------------------------------------------------
+# MAIN
+# --------------------------------------------------
+if __name__ == "__main__":
+    app.run(debug=True)

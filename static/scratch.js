@@ -1,74 +1,111 @@
 const canvas = document.getElementById("scratchCanvas");
-const ctx = canvas.getContext("2d");
+if (!canvas) {
+    // Card already scratched → nothing to do
+    console.log("Scratch canvas not present (already scratched)");
+} else {
+    const ctx = canvas.getContext("2d");
 
-canvas.width = 300;
-canvas.height = 200;
+    // Cover layer
+    ctx.fillStyle = "#bdbdbd";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-ctx.fillStyle = "#A0A0A0";
-ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Set scratch mode
+    ctx.globalCompositeOperation = "destination-out";
 
-let scratching = false;
-let revealed = false;
+    let isScratching = false;
+    let revealed = false;
 
-function getPosition(e) {
-    const rect = canvas.getBoundingClientRect();
-    if (e.touches) {
-        return {
-            x: e.touches[0].clientX - rect.left,
-            y: e.touches[0].clientY - rect.top
-        };
-    } else {
+    const radius = 16;
+    const revealThreshold = 0.6; // 60%
+
+    // -------------------------------
+    // GET SCRATCH POSITION
+    // -------------------------------
+    function getPosition(e) {
+        const rect = canvas.getBoundingClientRect();
+
+        if (e.touches && e.touches.length > 0) {
+            return {
+                x: e.touches[0].clientX - rect.left,
+                y: e.touches[0].clientY - rect.top
+            };
+        }
+
         return {
             x: e.clientX - rect.left,
             y: e.clientY - rect.top
         };
     }
-}
 
-function scratch(e) {
-    if (!scratching || revealed) return;
-    e.preventDefault();
+    // -------------------------------
+    // SCRATCH DRAW
+    // -------------------------------
+    function scratch(e) {
+        if (!isScratching || revealed) return;
 
-    const pos = getPosition(e);
+        e.preventDefault();
 
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, 18, 0, Math.PI * 2);
-    ctx.fill();
+        const pos = getPosition(e);
 
-    checkScratchPercentage();
-}
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+        ctx.fill();
 
-function checkScratchPercentage() {
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    let cleared = 0;
-
-    for (let i = 3; i < imageData.data.length; i += 4) {
-        if (imageData.data[i] === 0) cleared++;
+        checkReveal();
     }
 
-    const percent = (cleared / (canvas.width * canvas.height)) * 100;
+    // -------------------------------
+    // CHECK SCRATCH PERCENTAGE
+    // -------------------------------
+    function checkReveal() {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const pixels = imageData.data;
 
-    if (percent >= 60) reveal();
+        let transparentPixels = 0;
+
+        for (let i = 3; i < pixels.length; i += 4) {
+            if (pixels[i] === 0) transparentPixels++;
+        }
+
+        const scratchedRatio = transparentPixels / (canvas.width * canvas.height);
+
+        if (scratchedRatio >= revealThreshold) {
+            revealReward();
+        }
+    }
+
+    // -------------------------------
+    // REVEAL + BACKEND UPDATE
+    // -------------------------------
+    function revealReward() {
+        if (revealed) return;
+        revealed = true;
+
+        canvas.style.display = "none";
+        document.getElementById("reward").style.display = "block";
+
+        fetch(`/mark_scratched/${CARD_ID}`, {
+            method: "POST"
+        })
+        .then(res => res.json())
+        .then(data => {
+            console.log("Scratch DB update:", data);
+        })
+        .catch(err => {
+            console.error("Failed to update scratch status:", err);
+        });
+    }
+
+    // -------------------------------
+    // EVENT LISTENERS
+    // -------------------------------
+    canvas.addEventListener("mousedown", () => isScratching = true);
+    canvas.addEventListener("mouseup", () => isScratching = false);
+    canvas.addEventListener("mouseleave", () => isScratching = false);
+    canvas.addEventListener("mousemove", scratch);
+
+    canvas.addEventListener("touchstart", () => isScratching = true);
+    canvas.addEventListener("touchend", () => isScratching = false);
+    canvas.addEventListener("touchcancel", () => isScratching = false);
+    canvas.addEventListener("touchmove", scratch);
 }
-
-function reveal() {
-    revealed = true;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    fetch("/mark_scratched", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ card_id: CARD_ID })
-    });
-}
-
-/* Mouse Events */
-canvas.addEventListener("mousedown", () => scratching = true);
-canvas.addEventListener("mouseup", () => scratching = false);
-canvas.addEventListener("mousemove", scratch);
-
-/* Touch Events */
-canvas.addEventListener("touchstart", () => scratching = true);
-canvas.addEventListener("touchend", () => scratching = false);
-canvas.addEventListener("touchmove", scratch);
