@@ -6,7 +6,7 @@ body {
 .card-container {
     position: relative;
     width: 300px;
-    height: 200px;
+    height: 100px;
     margin: auto;
     user-select: none;
 }
